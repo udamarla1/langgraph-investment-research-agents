@@ -1,31 +1,26 @@
-import json
-import os
-import time
-from typing import Annotated, TypedDict, Literal, List, Optional
-from dotenv import load_dotenv
-import langchain_core
-from pydantic import BaseModel, Field
+from langchain_core.messages import HumanMessage
 
-# LangChain core
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_core.prompts import ChatPromptTemplate
-
-# Tavily search tool for real-time web research
-from langchain_community.tools.tavily_search import TavilySearchResults
-
-# LangGraph for multi-agent orchestration
-from langgraph.graph import StateGraph, END, START
-from langgraph.graph.message import add_messages
-import oneAgent
+from common import create_llm, create_search_tool
+from oneAgent import run_single_agent
 
 #print('test success')
 
 toResearch = ['TESLA', 'NVIDIA', 'MICROSOFT', 'APPLE', 'AMAZON']
 
 
-research_results = oneAgent.run_single_agent(toResearch)
+llm = create_llm()
+search_tool = create_search_tool()
+
+research_results = run_single_agent(
+	companies=toResearch,
+	llm_instance=llm,
+	search_tool_instance=search_tool,
+)
 #print(f"Research results: {research_results}")
+combined_report = "\n\n".join(
+	f"{result['company']}:\n{result['output']}"
+	for result in research_results
+)
 
 eval_prompt = f"""You are a senior investment analyst reviewing a junior analyst's report.
 Score this report on a scale of 1-10 for each category. Be brutally honest.
@@ -42,8 +37,8 @@ For each category, give:
 - One specific weakness you found
 
 Report to evaluate:
-{research_results['output'][:6000]}
+{combined_report[:6000]}
 """
 
-eval_tool = oneAgent.llmBrain.invoke([HumanMessage(content=eval_prompt)])
+eval_tool = llm.invoke([HumanMessage(content=eval_prompt)])
 print(f"Evaluation results: {eval_tool.content}")

@@ -1,75 +1,61 @@
-
-import os
 import time
 
-from langchain_community.tools import TavilySearchResults
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage
 
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    print("python-dotenv is not installed. Please install it to load environment variables from a .env file.")
+class SingleAgent:
+    def __init__(self, company: str, llm_instance, search_tool_instance):
+        self.company = company
+        self.llm = llm_instance
+        self.search_tool = search_tool_instance
 
-tavilyKey = os.getenv("TAVILY_API_KEY") 
-api_key = os.getenv("OPENAI_API_KEY")   
+    def run(self) -> dict:
+        start_time = time.time()
+        data = self.search_tool.invoke(self.company)
+        research = []
 
-search_tool = TavilySearchResults(max_results=5, tavily_api_key=tavilyKey)
-llmBrain = ChatOpenAI(
-    model_name="gpt-4o",
-    openai_api_key=api_key,
-    temperature=0.5,
-    max_retries=3,
-    request_timeout=30,
-)
-
-
-def run_single_agent(companies: list) -> dict:
-    start_time = time.time()
-    print(f"Running single agent for companies: {companies} at {start_time} seconds")
-
-    all_research = ""
-    for company in companies:
-        data = search_tool.invoke(company)
-        for r in data:
-            if isinstance(r, dict):
-                title = r.get("title", "")
-                url = r.get("url", "")
-                content = r.get("content", "")
+        for result in data:
+            if isinstance(result, dict):
+                title = result.get("title", "")
+                url = result.get("url", "")
+                content = result.get("content", "")
             else:
                 title = ""
                 url = ""
-                content = str(r)
+                content = str(result)
 
-            print(f"Company: {company}, Title: {title}, URL: {url}")
-            all_research += f"- {content[:300]}\n"
+            print(f"Company: {self.company}, Title: {title}, URL: {url}")
+            research.append(content[:300])
 
-    mega_prompt = f"""You are an investment analyst. Based on the research below, produce a
-COMPLETE investment analysis report with ALL of the following:
-1. FINANCIAL COMPARISON - Side-by-side comparison of revenue, growth, margins
-2. RISK ASSESSMENT - Key risks for each company
+        prompt = f"""You are an investment analyst. Analyze {self.company} using the research below.
 
-Companies: {', '.join(companies)}
+Include:
+1. Financial performance, including revenue, growth, and margins
+2. Market position and recent developments
+3. Key investment risks
 
 Research Data:
-{all_research[:8000]}
+{chr(10).join(f'- {item}' for item in research)[:8000]}
 
-Produce the FULL report now. Be thorough and specific with numbers."""
+Use specific numbers and dates where available."""
 
-    response = llmBrain.invoke([HumanMessage(content=mega_prompt)])
+        response = self.llm.invoke([
+            HumanMessage(content=prompt)
+        ])
+        elapsed = time.time() - start_time
 
-    elapsed = time.time() - start_time
+        return {
+            "company": self.company,
+            "output": response.content,
+            "time": elapsed,
+            "output_length": len(response.content),
+            "approach": "Single Agent",
+        }
 
-    print(f"\n⏱️  Total time: {elapsed:.1f}s")
-    print(f"📄 Output length: {len(response.content)} chars")
 
-    return {
-        "output": response.content,
-        "time": elapsed,
-        "output_length": len(response.content),
-        "approach": "Single Agent"
-    }
-
-    
+def run_single_agent(companies: list, llm_instance, search_tool_instance) -> list:
+    agents = [
+        SingleAgent(company, llm_instance, search_tool_instance)
+        for company in companies
+    ]
+    return [agent.run() for agent in agents]
