@@ -1,9 +1,10 @@
 
 import common
-import stateData
+from langchain_core.messages import HumanMessage
+from stateData import InvestmentState
 
 
-def writer_node(state: stateData) -> dict:
+def writer_node(state: InvestmentState) -> dict:
     """
     Writer node that generates a summary report based on the research results.
 
@@ -21,15 +22,24 @@ def writer_node(state: stateData) -> dict:
     financial_analysis = state.get('financial_analysis', '')
 
     # Combine research results into a single prompt for the writer
-    writer_prompt = f"""You are an investment analyst. Based on the following research results, generate a concise and
-    informative summary report for investment analysis"""
+    writer_prompt = f"""You are an investment analyst. Based on the following analysis, generate a concise and
+informative summary report for investment analysis.
+
+Financial analysis:
+{financial_analysis}
+
+Risk assessment:
+{risk_assessment}
+
+Investment memo:
+{investment_memo}
+"""
 
     response = common.create_llm().invoke([
-        stateData.HumanMessage(content=writer_prompt)
+        HumanMessage(content=writer_prompt)
     ])
 
     return {
-        "investment_memo": response['summary_report'],
-        "time": response['time'],
-        "output_length": response['output_length'],
-        "approach": response['approach']}
+        "investment_memo": response.content,
+        "current_agent": "writer",
+    }
